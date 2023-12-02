@@ -1,0 +1,11 @@
+[package]
+name = "zen"
+version = "0.0.1"
+authors = ["Tyler Harold <tyler@programmer.net>"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+termion = "2.0.3"
+unicode-segmentation = "1.10.1"

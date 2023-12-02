@@ -1,4 +1,5 @@
 use crate::Document;
+use crate::EditorMode;
 use crate::Row;
 use crate::Terminal;
 
@@ -40,6 +41,7 @@ pub struct Editor {
     status_message: StatusMessage,
     quit_times: u8,
     highlighted_word: Option<String>,
+    mode: EditorMode,
 }
 
 impl Editor {
@@ -86,47 +88,65 @@ impl Editor {
             status_message: StatusMessage::from(initial_status),
             quit_times: QUIT_TIMES,
             highlighted_word: None,
+            mode: EditorMode::Insert,
         }
     }
 
     fn process_keypress(&mut self) -> Result<(), std::io::Error> {
         let pressed_key = Terminal::read_key()?;
 
-        match pressed_key {
-            Key::Ctrl('q') => {
-                if self.quit_times > 0 && self.document.is_dirty() {
-                    self.status_message = StatusMessage::from(format!(
+        match self.mode {
+            EditorMode::Normal => match pressed_key {
+                // Switch to Insert Mode
+                Key::Char('i') => {
+                    self.mode = EditorMode::Insert;
+                }
+                _ => (),
+            },
+            EditorMode::Insert => match pressed_key {
+                // Switch to Normal mode
+                Key::Esc => {
+                    self.mode = EditorMode::Normal;
+                }
+                Key::Ctrl('q') => {
+                    if self.quit_times > 0 && self.document.is_dirty() {
+                        self.status_message = StatusMessage::from(format!(
                         "WARNING! File has unsaved changes. Press Ctrl-Q {} more times to quit.",
                         self.quit_times
                     ));
-                    self.quit_times -= 1;
-                    return Ok(());
+                        self.quit_times -= 1;
+                        return Ok(());
+                    }
+                    self.should_quit = true
                 }
-                self.should_quit = true
-            }
-            Key::Ctrl('s') => self.save(),
-            Key::Ctrl('f') => self.search(),
-            Key::Char(c) => {
-                self.document.insert(&self.cursor_position, c);
-                self.move_cursor(Key::Right);
-            }
-            Key::Delete => self.document.delete(&self.cursor_position),
-            Key::Backspace => {
-                if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
-                    self.move_cursor(Key::Left);
-                    self.document.delete(&self.cursor_position);
+                Key::Ctrl('s') => self.save(),
+                Key::Ctrl('f') => self.search(),
+                Key::Char(c) => {
+                    self.document.insert(&self.cursor_position, c);
+                    self.move_cursor(Key::Right);
                 }
-            }
-            Key::Up
-            | Key::Down
-            | Key::Left
-            | Key::Right
-            | Key::PageUp
-            | Key::PageDown
-            | Key::End
-            | Key::Home => self.move_cursor(pressed_key),
-            _ => (),
+                Key::Delete => self.document.delete(&self.cursor_position),
+                Key::Backspace => {
+                    if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
+                        self.move_cursor(Key::Left);
+                        self.document.delete(&self.cursor_position);
+                    }
+                }
+                Key::Up
+                | Key::Down
+                | Key::Left
+                | Key::Right
+                | Key::PageUp
+                | Key::PageDown
+                | Key::End
+                | Key::Home => self.move_cursor(pressed_key),
+                _ => (),
+            },
+            EditorMode::Command => match pressed_key {
+                _ => (),
+            },
         }
+
         self.scroll();
         if self.quit_times < QUIT_TIMES {
             self.quit_times = QUIT_TIMES;

@@ -192,17 +192,6 @@ impl Editor {
     }
 
     fn move_cursor(&mut self, key: Key) {
-        let Position { mut y, mut x } = self.cursor_position;
-        let mut width = if let Some(row) = self.document.row(y) {
-            row.len()
-        } else {
-            0
-        };
-
-        if x > width {
-            x = width;
-        }
-
         match key {
             Key::Up => commands::cursor::move_up(self),
             Key::Down => commands::cursor::move_down(self),

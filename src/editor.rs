@@ -123,7 +123,7 @@ impl Editor {
                 Key::Delete => self.document.delete(&self.cursor_position),
                 Key::Backspace => {
                     if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
-                        self.move_cursor(Key::Left);
+                        self.execute(Command::CursorMoveLeft);
                         self.document.delete(&self.cursor_position);
                     }
                 }
@@ -152,12 +152,12 @@ impl Editor {
 
     fn execute(&mut self, command: Command) {
         match command {
-            Command::CursorMoveUp => self.move_cursor(Key::Up),
-            Command::CursorMoveDown => self.move_cursor(Key::Down),
-            Command::CursorMoveLeft => self.move_cursor(Key::Left),
-            Command::CursorMoveRight => self.move_cursor(Key::Right),
-            Command::CursorMoveStart => self.move_cursor(Key::Home),
-            Command::CursorMoveEnd => self.move_cursor(Key::End),
+            Command::CursorMoveUp => commands::cursor::move_up(self),
+            Command::CursorMoveDown => commands::cursor::move_down(self),
+            Command::CursorMoveLeft => commands::cursor::move_left(self),
+            Command::CursorMoveRight => commands::cursor::move_right(self),
+            Command::CursorMoveStart => commands::cursor::move_start_of_row(self),
+            Command::CursorMoveEnd => commands::cursor::move_end_of_row(self),
 
             Command::DocumentInsert(c) => {
                 self.document.insert(&self.cursor_position, c);
@@ -165,8 +165,8 @@ impl Editor {
             }
             Command::DocumentSave => self.save(),
             Command::DocumentSearch => self.search(),
-            Command::DocumentPageUp => self.move_cursor(Key::PageUp),
-            Command::DocumentPageDown => self.move_cursor(Key::PageDown),
+            Command::DocumentPageUp => commands::view::scroll_up(self),
+            Command::DocumentPageDown => commands::view::scroll_down(self),
 
             Command::EditorSwitchMode(mode) => self.mode = mode,
             _ => (),
@@ -188,20 +188,6 @@ impl Editor {
             offset.x = x;
         } else if x >= offset.x.saturating_add(width) {
             offset.x = x.saturating_sub(width).saturating_add(1);
-        }
-    }
-
-    fn move_cursor(&mut self, key: Key) {
-        match key {
-            Key::Up => commands::cursor::move_up(self),
-            Key::Down => commands::cursor::move_down(self),
-            Key::Left => commands::cursor::move_left(self),
-            Key::Right => commands::cursor::move_right(self),
-            Key::PageUp => commands::view::scroll_up(self),
-            Key::PageDown => commands::view::scroll_down(self),
-            Key::Home => commands::cursor::move_start_of_row(self),
-            Key::End => commands::cursor::move_end_of_row(self),
-            _ => (),
         }
     }
 
@@ -389,7 +375,7 @@ impl Editor {
                     match key {
                         Key::Right | Key::Down => {
                             direction = SearchDirection::Forward;
-                            editor.move_cursor(Key::Right);
+                            editor.execute(Command::CursorMoveRight);
                             moved = true;
                         }
                         Key::Left | Key::Up => direction = SearchDirection::Backward,
@@ -403,7 +389,7 @@ impl Editor {
                         editor.cursor_position = position;
                         editor.scroll();
                     } else if moved {
-                        editor.move_cursor(Key::Left);
+                        editor.execute(Command::CursorMoveLeft);
                     }
                     editor.highlighted_word = Some(query.to_string());
                 },

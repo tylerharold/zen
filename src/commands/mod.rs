@@ -1,5 +1,8 @@
 use crate::EditorMode;
 
+pub mod cursor;
+pub mod view;
+
 pub enum Command {
     // Document
     DocumentInsert(char),

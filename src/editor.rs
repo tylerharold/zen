@@ -1,3 +1,5 @@
+use crate::commands;
+use crate::commands::Command;
 use crate::Document;
 use crate::EditorMode;
 use crate::Row;
@@ -34,10 +36,10 @@ pub enum SearchDirection {
 
 pub struct Editor {
     should_quit: bool,
-    terminal: Terminal,
-    cursor_position: Position,
+    pub terminal: Terminal,
+    pub cursor_position: Position,
     offset: Position,
-    document: Document,
+    pub document: Document,
     status_message: StatusMessage,
     quit_times: u8,
     highlighted_word: Option<String>,
@@ -98,16 +100,12 @@ impl Editor {
         match self.mode {
             EditorMode::Normal => match pressed_key {
                 // Switch to Insert Mode
-                Key::Char('i') => {
-                    self.mode = EditorMode::Insert;
-                }
+                Key::Char('i') => self.execute(Command::EditorSwitchMode(EditorMode::Insert)),
                 _ => (),
             },
             EditorMode::Insert => match pressed_key {
                 // Switch to Normal mode
-                Key::Esc => {
-                    self.mode = EditorMode::Normal;
-                }
+                Key::Esc => self.execute(Command::EditorSwitchMode(EditorMode::Normal)),
                 Key::Ctrl('q') => {
                     if self.quit_times > 0 && self.document.is_dirty() {
                         self.status_message = StatusMessage::from(format!(
@@ -119,27 +117,24 @@ impl Editor {
                     }
                     self.should_quit = true
                 }
-                Key::Ctrl('s') => self.save(),
-                Key::Ctrl('f') => self.search(),
-                Key::Char(c) => {
-                    self.document.insert(&self.cursor_position, c);
-                    self.move_cursor(Key::Right);
-                }
+                Key::Ctrl('s') => self.execute(Command::DocumentSave),
+                Key::Ctrl('f') => self.execute(Command::DocumentSearch),
+                Key::Char(c) => self.execute(Command::DocumentInsert(c)),
                 Key::Delete => self.document.delete(&self.cursor_position),
                 Key::Backspace => {
                     if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
-                        self.move_cursor(Key::Left);
+                        self.execute(Command::CursorMoveLeft);
                         self.document.delete(&self.cursor_position);
                     }
                 }
-                Key::Up
-                | Key::Down
-                | Key::Left
-                | Key::Right
-                | Key::PageUp
-                | Key::PageDown
-                | Key::End
-                | Key::Home => self.move_cursor(pressed_key),
+                Key::Up => self.execute(Command::CursorMoveUp),
+                Key::Down => self.execute(Command::CursorMoveDown),
+                Key::Left => self.execute(Command::CursorMoveLeft),
+                Key::Right => self.execute(Command::CursorMoveRight),
+                Key::PageUp => self.execute(Command::DocumentPageUp),
+                Key::PageDown => self.execute(Command::DocumentPageDown),
+                Key::Home => self.execute(Command::CursorMoveStart),
+                Key::End => self.execute(Command::CursorMoveEnd),
                 _ => (),
             },
             EditorMode::Command => match pressed_key {
@@ -153,6 +148,29 @@ impl Editor {
             self.status_message = StatusMessage::from(String::new());
         }
         Ok(())
+    }
+
+    fn execute(&mut self, command: Command) {
+        match command {
+            Command::CursorMoveUp => commands::cursor::move_up(self),
+            Command::CursorMoveDown => commands::cursor::move_down(self),
+            Command::CursorMoveLeft => commands::cursor::move_left(self),
+            Command::CursorMoveRight => commands::cursor::move_right(self),
+            Command::CursorMoveStart => commands::cursor::move_start_of_row(self),
+            Command::CursorMoveEnd => commands::cursor::move_end_of_row(self),
+
+            Command::DocumentInsert(c) => {
+                self.document.insert(&self.cursor_position, c);
+                self.execute(Command::CursorMoveRight);
+            }
+            Command::DocumentSave => self.save(),
+            Command::DocumentSearch => self.search(),
+            Command::DocumentPageUp => commands::view::scroll_up(self),
+            Command::DocumentPageDown => commands::view::scroll_down(self),
+
+            Command::EditorSwitchMode(mode) => self.mode = mode,
+            _ => (),
+        }
     }
 
     fn scroll(&mut self) {
@@ -171,69 +189,6 @@ impl Editor {
         } else if x >= offset.x.saturating_add(width) {
             offset.x = x.saturating_sub(width).saturating_add(1);
         }
-    }
-
-    fn move_cursor(&mut self, key: Key) {
-        let terminal_height = self.terminal.size().height as usize;
-        let Position { mut y, mut x } = self.cursor_position;
-        let height = self.document.len();
-        let mut width = if let Some(row) = self.document.row(y) {
-            row.len()
-        } else {
-            0
-        };
-
-        if x > width {
-            x = width;
-        }
-
-        match key {
-            Key::Up => y = y.saturating_sub(1),
-            Key::Down => {
-                if y < height {
-                    y = y.saturating_add(1);
-                }
-            }
-            Key::Left => {
-                if x > 0 {
-                    x -= 1;
-                } else if y > 0 {
-                    y -= 1;
-                    if let Some(row) = self.document.row(y) {
-                        x = row.len();
-                    } else {
-                        x = 0;
-                    }
-                }
-            }
-            Key::Right => {
-                if x < width {
-                    x += 1;
-                } else if y < height {
-                    y += 1;
-                    x = 0;
-                }
-            }
-            Key::PageUp => {
-                y = if y > terminal_height {
-                    y - terminal_height
-                } else {
-                    0
-                }
-            }
-            Key::PageDown => {
-                y = if y.saturating_add(terminal_height) < height {
-                    y.saturating_add(terminal_height)
-                } else {
-                    height
-                }
-            }
-            Key::Home => x = 0,
-            Key::End => x = width,
-            _ => (),
-        }
-
-        self.cursor_position = Position { x, y }
     }
 
     fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
@@ -420,7 +375,7 @@ impl Editor {
                     match key {
                         Key::Right | Key::Down => {
                             direction = SearchDirection::Forward;
-                            editor.move_cursor(Key::Right);
+                            editor.execute(Command::CursorMoveRight);
                             moved = true;
                         }
                         Key::Left | Key::Up => direction = SearchDirection::Backward,
@@ -434,7 +389,7 @@ impl Editor {
                         editor.cursor_position = position;
                         editor.scroll();
                     } else if moved {
-                        editor.move_cursor(Key::Left);
+                        editor.execute(Command::CursorMoveLeft);
                     }
                     editor.highlighted_word = Some(query.to_string());
                 },

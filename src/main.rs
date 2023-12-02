@@ -7,6 +7,7 @@
     clippy::wildcard_enum_match_arm,
     clippy::else_if_without_else
 )]
+mod command;
 mod document;
 mod editor;
 mod filetype;
@@ -17,6 +18,7 @@ mod terminal;
 
 use editor::Editor;
 
+pub use command::Command;
 pub use document::Document;
 pub use editor::Position;
 pub use editor::SearchDirection;

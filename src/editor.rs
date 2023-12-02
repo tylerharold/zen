@@ -1,3 +1,4 @@
+use crate::Command;
 use crate::Document;
 use crate::EditorMode;
 use crate::Row;
@@ -98,16 +99,12 @@ impl Editor {
         match self.mode {
             EditorMode::Normal => match pressed_key {
                 // Switch to Insert Mode
-                Key::Char('i') => {
-                    self.mode = EditorMode::Insert;
-                }
+                Key::Char('i') => self.execute(Command::EditorSwitchMode(EditorMode::Insert)),
                 _ => (),
             },
             EditorMode::Insert => match pressed_key {
                 // Switch to Normal mode
-                Key::Esc => {
-                    self.mode = EditorMode::Normal;
-                }
+                Key::Esc => self.execute(Command::EditorSwitchMode(EditorMode::Normal)),
                 Key::Ctrl('q') => {
                     if self.quit_times > 0 && self.document.is_dirty() {
                         self.status_message = StatusMessage::from(format!(
@@ -119,12 +116,9 @@ impl Editor {
                     }
                     self.should_quit = true
                 }
-                Key::Ctrl('s') => self.save(),
-                Key::Ctrl('f') => self.search(),
-                Key::Char(c) => {
-                    self.document.insert(&self.cursor_position, c);
-                    self.move_cursor(Key::Right);
-                }
+                Key::Ctrl('s') => self.execute(Command::DocumentSave),
+                Key::Ctrl('f') => self.execute(Command::DocumentSearch),
+                Key::Char(c) => self.execute(Command::DocumentInsert(c)),
                 Key::Delete => self.document.delete(&self.cursor_position),
                 Key::Backspace => {
                     if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
@@ -132,14 +126,14 @@ impl Editor {
                         self.document.delete(&self.cursor_position);
                     }
                 }
-                Key::Up
-                | Key::Down
-                | Key::Left
-                | Key::Right
-                | Key::PageUp
-                | Key::PageDown
-                | Key::End
-                | Key::Home => self.move_cursor(pressed_key),
+                Key::Up => self.execute(Command::CursorMoveUp),
+                Key::Down => self.execute(Command::CursorMoveDown),
+                Key::Left => self.execute(Command::CursorMoveLeft),
+                Key::Right => self.execute(Command::CursorMoveRight),
+                Key::PageUp => self.execute(Command::DocumentPageUp),
+                Key::PageDown => self.execute(Command::DocumentPageDown),
+                Key::Home => self.execute(Command::CursorMoveStart),
+                Key::End => self.execute(Command::CursorMoveEnd),
                 _ => (),
             },
             EditorMode::Command => match pressed_key {
@@ -153,6 +147,29 @@ impl Editor {
             self.status_message = StatusMessage::from(String::new());
         }
         Ok(())
+    }
+
+    fn execute(&mut self, command: Command) {
+        match command {
+            Command::CursorMoveUp => self.move_cursor(Key::Up),
+            Command::CursorMoveDown => self.move_cursor(Key::Down),
+            Command::CursorMoveLeft => self.move_cursor(Key::Left),
+            Command::CursorMoveRight => self.move_cursor(Key::Right),
+            Command::CursorMoveStart => self.move_cursor(Key::Home),
+            Command::CursorMoveEnd => self.move_cursor(Key::End),
+
+            Command::DocumentInsert(c) => {
+                self.document.insert(&self.cursor_position, c);
+                self.execute(Command::CursorMoveRight);
+            }
+            Command::DocumentSave => self.save(),
+            Command::DocumentSearch => self.search(),
+            Command::DocumentPageUp => self.move_cursor(Key::PageUp),
+            Command::DocumentPageDown => self.move_cursor(Key::PageDown),
+
+            Command::EditorSwitchMode(mode) => self.mode = mode,
+            _ => (),
+        }
     }
 
     fn scroll(&mut self) {

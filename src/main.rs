@@ -10,7 +10,6 @@
 mod commands;
 mod document;
 mod editor;
-mod filetype;
 mod mode;
 mod row;
 mod terminal;
@@ -21,7 +20,6 @@ use editor::Editor;
 pub use document::Document;
 pub use editor::Position;
 pub use editor::SearchDirection;
-pub use filetype::FileType;
 pub use mode::EditorMode;
 pub use row::Row;
 pub use terminal::Terminal;

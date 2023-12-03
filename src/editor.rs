@@ -253,10 +253,6 @@ impl Editor {
     }
 
     fn draw_row(&self, row: &Row) {
-        let width = self.terminal.size().width as usize;
-        let start = self.offset.x;
-        let end = self.offset.x.saturating_add(width);
-
         let row = row.render();
         println!("{}\r", row)
     }

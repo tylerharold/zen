@@ -29,9 +29,6 @@ impl Document {
 
         let ss = SyntaxSet::load_defaults_newlines();
         let ts = ThemeSet::load_defaults();
-        for theme in &ts.themes {
-            log::error!("{:?}", theme);
-        }
 
         for value in contents.lines() {
             rows.push(Row::from(value));
@@ -180,12 +177,9 @@ impl Document {
     pub fn highlight(&mut self, visible_range: Range<usize>) {
         if let Some(syntax) = self.syntax_set.find_syntax_by_extension("rs") {
             let mut h = HighlightLines::new(&syntax, &self.theme_set.themes["base16-ocean.dark"]);
-            log::error!("Visible Range: {:?}", visible_range);
 
             for row_num in visible_range {
-                log::error!("Row Num: {:?}", row_num);
                 if let Some(row) = self.rows.get_mut(row_num) {
-                    log::error!("Certified Hood Classic Row Num: {:?}", row_num);
                     row.highlight(&self.syntax_set, &mut h);
                 }
             }

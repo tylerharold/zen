@@ -29,12 +29,8 @@ impl From<&str> for Row {
 }
 
 impl Row {
-    pub fn render(&self, start: usize, end: usize) -> String {
-        let end = cmp::min(end, self.string.len());
-        let start = cmp::min(start, end);
-
-        let mut result = self.highlighting.clone();
-        result
+    pub fn render(&self) -> String {
+        self.highlighting.clone()
     }
 
     pub fn len(&self) -> usize {

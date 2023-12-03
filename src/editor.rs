@@ -5,7 +5,9 @@ use crate::EditorMode;
 use crate::Row;
 use crate::Terminal;
 
+use std::cmp;
 use std::env;
+use std::ops::Range;
 use std::time::Duration;
 use std::time::Instant;
 use termion::color;
@@ -198,7 +200,8 @@ impl Editor {
             println!("Goodbye.\r");
             Terminal::clear_screen();
         } else {
-            self.document.highlight();
+            let viewport = self.calculate_viewport();
+            self.document.highlight(viewport);
             self.draw_rows();
             self.draw_status_bar();
             self.draw_message_bar();
@@ -209,6 +212,14 @@ impl Editor {
         }
         Terminal::cursor_show();
         Terminal::flush()
+    }
+
+    fn calculate_viewport(&self) -> Range<usize> {
+        let height = self.terminal.size().height as usize;
+        let start_row = self.offset.y;
+        let end_row = cmp::min(self.offset.y + height, self.document.len());
+
+        start_row..end_row
     }
 
     fn draw_rows(&self) {
@@ -246,7 +257,7 @@ impl Editor {
         let start = self.offset.x;
         let end = self.offset.x.saturating_add(width);
 
-        let row = row.render(start, end);
+        let row = row.render();
         println!("{}\r", row)
     }
 

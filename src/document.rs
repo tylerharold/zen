@@ -1,23 +1,41 @@
-use crate::FileType;
 use crate::Position;
 use crate::Row;
 use crate::SearchDirection;
+
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
+use std::ops::Range;
+use std::path::Path;
+
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 
 #[derive(Default)]
 pub struct Document {
     rows: Vec<Row>,
     pub file_name: Option<String>,
     dirty: bool,
-    file_type: FileType,
+    file_type: String,
+    syntax_set: SyntaxSet,
+    theme_set: ThemeSet,
 }
 
 impl Document {
     pub fn open(filename: &str) -> Result<Self, std::io::Error> {
         let contents = fs::read_to_string(filename)?;
-        let file_type = FileType::from(filename);
+
+        let file_type = Path::new(filename)
+            .extension()
+            .and_then(OsStr::to_str)
+            .unwrap_or(&"Unknown");
+
+        log::error!("{:?}", file_type.to_string());
         let mut rows = Vec::new();
+
+        let ss = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
 
         for value in contents.lines() {
             rows.push(Row::from(value));
@@ -27,12 +45,14 @@ impl Document {
             rows,
             file_name: Some(filename.to_string()),
             dirty: false,
-            file_type,
+            file_type: file_type.to_string(),
+            syntax_set: ss,
+            theme_set: ts,
         })
     }
 
     pub fn file_type(&self) -> String {
-        self.file_type.name()
+        self.file_type.clone()
     }
 
     pub fn row(&self, index: usize) -> Option<&Row> {
@@ -57,10 +77,12 @@ impl Document {
         if c == '\n' {
             self.insert_newline(at);
         } else if at.y == self.rows.len() {
+            // Handle insertion at the end of the document
             let mut row = Row::default();
             row.insert(0, c);
             self.rows.push(row);
         } else {
+            // Handle regular character insertion
             let row = &mut self.rows[at.y];
             row.insert(at.x, c);
         }
@@ -98,14 +120,12 @@ impl Document {
             let row = self.rows.get_mut(at.y).unwrap();
             row.delete(at.x);
         }
-
-        self.unhighlight_rows(at.y);
     }
 
     pub fn save(&mut self) -> Result<(), std::io::Error> {
         if let Some(file_name) = &self.file_name {
             let mut file = fs::File::create(file_name)?;
-            self.file_type = FileType::from(file_name);
+            self.file_type = ".rs".to_string();
 
             for row in &mut self.rows {
                 file.write_all(row.as_bytes())?;
@@ -161,33 +181,17 @@ impl Document {
         None
     }
 
-    pub fn highlight(&mut self, word: &Option<String>, until: Option<usize>) {
-        let mut start_with_comment = false;
+    pub fn highlight(&mut self, visible_range: Range<usize>) {
+        if let Some(syntax) = self.syntax_set.find_syntax_by_extension(&self.file_type) {
+            let mut h = HighlightLines::new(&syntax, &self.theme_set.themes["base16-ocean.dark"]);
 
-        let until = if let Some(until) = until {
-            if until.saturating_add(1) < self.rows.len() {
-                until.saturating_add(1)
-            } else {
-                self.rows.len()
+            for row_num in visible_range {
+                if let Some(row) = self.rows.get_mut(row_num) {
+                    row.highlight(&self.syntax_set, &mut h);
+                }
             }
         } else {
-            self.rows.len()
-        };
-
-        for row in &mut self.rows {
-            start_with_comment = row.highlight(
-                &self.file_type.highlighting_options(),
-                word,
-                start_with_comment,
-            );
-        }
-    }
-
-    fn unhighlight_rows(&mut self, start: usize) {
-        let start = start.saturating_sub(1);
-
-        for row in self.rows.iter_mut().skip(start) {
-            row.is_highlighted = false;
+            // Handle this at some point
         }
     }
 }

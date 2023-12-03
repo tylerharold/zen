@@ -8,7 +8,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Default)]
 pub struct Row {
-    string: String,
+    pub string: String,
     highlighting: String,
     len: usize,
 }

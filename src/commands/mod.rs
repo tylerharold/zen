@@ -8,6 +8,8 @@ pub enum Command {
     DocumentInsert(char),
     DocumentPageUp,
     DocumentPageDown,
+    DocumentMoveStart,
+    DocumentMoveEnd,
     DocumentSave,
     DocumentSearch,
     DocumentQuit,
@@ -19,6 +21,8 @@ pub enum Command {
     CursorMoveRight,
     CursorMoveStart,
     CursorMoveEnd,
+    CursorMoveNextWord,
+    CursorMovePrevWord,
 
     // Editor
     EditorSwitchMode(EditorMode),

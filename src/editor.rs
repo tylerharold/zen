@@ -40,7 +40,7 @@ pub struct Editor {
     should_quit: bool,
     pub terminal: Terminal,
     pub cursor_position: Position,
-    offset: Position,
+    pub offset: Position,
     pub document: Document,
     status_message: StatusMessage,
     quit_times: u8,
@@ -92,7 +92,7 @@ impl Editor {
             status_message: StatusMessage::from(initial_status),
             quit_times: QUIT_TIMES,
             highlighted_word: None,
-            mode: EditorMode::Insert,
+            mode: EditorMode::Normal,
         }
     }
 
@@ -103,11 +103,22 @@ impl Editor {
             EditorMode::Normal => match pressed_key {
                 // Switch to Insert Mode
                 Key::Char('i') => self.execute(Command::EditorSwitchMode(EditorMode::Insert)),
-                _ => (),
-            },
-            EditorMode::Insert => match pressed_key {
-                // Switch to Normal mode
-                Key::Esc => self.execute(Command::EditorSwitchMode(EditorMode::Normal)),
+
+                Key::Char('h') => self.execute(Command::CursorMoveLeft),
+                Key::Char('j') => self.execute(Command::CursorMoveUp),
+                Key::Char('k') => self.execute(Command::CursorMoveDown),
+                Key::Char('l') => self.execute(Command::CursorMoveRight),
+
+                Key::Left => self.execute(Command::CursorMovePrevWord),
+                Key::Right => self.execute(Command::CursorMoveNextWord),
+
+                Key::Ctrl('J') => self.execute(Command::DocumentMoveStart),
+                Key::Ctrl('K') => self.execute(Command::DocumentMoveEnd),
+                Key::Char('J') => self.execute(Command::DocumentPageUp),
+                Key::Char('K') => self.execute(Command::DocumentPageDown),
+                Key::Char('H') => self.execute(Command::CursorMoveStart),
+                Key::Char('L') => self.execute(Command::CursorMoveEnd),
+
                 Key::Ctrl('q') => {
                     if self.quit_times > 0 && self.document.is_dirty() {
                         self.status_message = StatusMessage::from(format!(
@@ -119,6 +130,12 @@ impl Editor {
                     }
                     self.should_quit = true
                 }
+                _ => (),
+            },
+            EditorMode::Insert => match pressed_key {
+                // Switch to Normal mode
+                Key::Esc => self.execute(Command::EditorSwitchMode(EditorMode::Normal)),
+
                 Key::Ctrl('s') => self.execute(Command::DocumentSave),
                 Key::Ctrl('f') => self.execute(Command::DocumentSearch),
                 Key::Char(c) => self.execute(Command::DocumentInsert(c)),
@@ -160,6 +177,8 @@ impl Editor {
             Command::CursorMoveRight => commands::cursor::move_right(self),
             Command::CursorMoveStart => commands::cursor::move_start_of_row(self),
             Command::CursorMoveEnd => commands::cursor::move_end_of_row(self),
+            Command::CursorMoveNextWord => commands::cursor::move_next_word(self),
+            Command::CursorMovePrevWord => commands::cursor::move_prev_word(self),
 
             Command::DocumentInsert(c) => {
                 self.document.insert(&self.cursor_position, c);
@@ -169,6 +188,8 @@ impl Editor {
             Command::DocumentSearch => self.search(),
             Command::DocumentPageUp => commands::view::scroll_up(self),
             Command::DocumentPageDown => commands::view::scroll_down(self),
+            Command::DocumentMoveStart => commands::cursor::move_start_of_document(self),
+            Command::DocumentMoveEnd => commands::cursor::move_end_of_document(self),
 
             Command::EditorSwitchMode(mode) => self.mode = mode,
             _ => (),

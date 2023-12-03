@@ -6,9 +6,11 @@ use crate::SearchDirection;
 use std::fs;
 use std::io::Write;
 
+use syntect::easy::HighlightFile;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
+use syntect::util::LinesWithEndings;
 
 #[derive(Default)]
 pub struct Document {
@@ -26,12 +28,12 @@ impl Document {
         let file_type = FileType::from(filename);
         let mut rows = Vec::new();
 
+        let ss = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+
         for value in contents.lines() {
             rows.push(Row::from(value));
         }
-
-        let ss = SyntaxSet::load_defaults_newlines();
-        let ts = ThemeSet::load_defaults();
 
         Ok(Self {
             rows,
@@ -112,8 +114,6 @@ impl Document {
             let row = self.rows.get_mut(at.y).unwrap();
             row.delete(at.x);
         }
-
-        self.unhighlight_rows(at.y);
     }
 
     pub fn save(&mut self) -> Result<(), std::io::Error> {
@@ -177,19 +177,13 @@ impl Document {
 
     pub fn highlight(&mut self) {
         if let Some(syntax) = self.syntax_set.find_syntax_by_extension("rs") {
-            let mut h = HighlightLines::new(syntax, &self.theme_set.themes["base16-ocean.dark"]);
+            let mut h = HighlightLines::new(&syntax, &self.theme_set.themes["base16-ocean.dark"]);
+
             for row in &mut self.rows {
-                row.highlight(&syntax, &self.theme_set, &self.syntax_set, &mut h);
+                row.highlight(&self.syntax_set, &mut h);
             }
         } else {
-        }
-    }
-
-    fn unhighlight_rows(&mut self, start: usize) {
-        let start = start.saturating_sub(1);
-
-        for row in self.rows.iter_mut().skip(start) {
-            row.is_highlighted = false;
+            // Handle this at some point
         }
     }
 }

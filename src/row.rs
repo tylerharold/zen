@@ -4,17 +4,15 @@ use crate::SearchDirection;
 use std::cmp;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style;
-use syntect::highlighting::ThemeSet;
-use syntect::parsing::SyntaxReference;
 use syntect::parsing::SyntaxSet;
+use syntect::util::as_24_bit_terminal_escaped;
 use termion::color;
 use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Default)]
 pub struct Row {
     string: String,
-    highlighting: Vec<Style>,
-    pub is_highlighted: bool,
+    highlighting: String,
     len: usize,
 }
 
@@ -22,8 +20,7 @@ impl From<&str> for Row {
     fn from(slice: &str) -> Self {
         let mut row = Self {
             string: String::from(slice),
-            highlighting: Vec::new(),
-            is_highlighted: false,
+            highlighting: String::from(slice),
             len: 0,
         };
         row.update_len();
@@ -36,22 +33,7 @@ impl Row {
         let end = cmp::min(end, self.string.len());
         let start = cmp::min(start, end);
 
-        let mut result = String::new();
-        for (index, grapheme) in self.string[..]
-            .graphemes(true)
-            .enumerate()
-            .skip(start)
-            .take(end - start)
-        {
-            if let Some(c) = grapheme.chars().next() {
-                let default_style = Style::default();
-                let style = self.highlighting.get(index).unwrap_or(&default_style);
-
-                let formatted_grapheme = format!("{}{}", style_to_termion(style), c);
-                result.push_str(&formatted_grapheme);
-            }
-        }
-        result.push_str(&format!("{}", color::Fg(color::Reset)));
+        let mut result = self.highlighting.clone();
         result
     }
 
@@ -131,12 +113,11 @@ impl Row {
 
         self.string = row;
         self.len = length;
-        self.is_highlighted = false;
+        let highlighting = splitted_row.clone();
         Self {
             string: splitted_row,
             len: splitted_length,
-            is_highlighted: false,
-            highlighting: Vec::new(),
+            highlighting: highlighting,
         }
     }
 
@@ -186,16 +167,14 @@ impl Row {
         None
     }
 
-    pub fn highlight(
-        &mut self,
-        syntax: &SyntaxReference,
-        theme: &ThemeSet,
-        syntax_set: &SyntaxSet,
-        h: &mut HighlightLines,
-    ) {
-        let ranges: Vec<(Style, &str)> = h.highlight_line(&self.string, &syntax_set).unwrap();
+    pub fn highlight(&mut self, syntax_set: &SyntaxSet, highlighter: &mut HighlightLines) {
+        let ranges: Vec<(Style, &str)> = highlighter
+            .highlight_line(&self.string, syntax_set)
+            .unwrap();
 
-        self.highlighting = ranges.iter().map(|(style, _)| style.clone()).collect();
+        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+
+        self.highlighting = escaped;
     }
 
     pub fn whitespace_len(&self) -> usize {

@@ -198,14 +198,7 @@ impl Editor {
             println!("Goodbye.\r");
             Terminal::clear_screen();
         } else {
-            self.document.highlight(
-                &self.highlighted_word,
-                Some(
-                    self.offset
-                        .y
-                        .saturating_add(self.terminal.size().height as usize),
-                ),
-            );
+            self.document.highlight();
             self.draw_rows();
             self.draw_status_bar();
             self.draw_message_bar();

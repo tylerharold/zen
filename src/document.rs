@@ -2,8 +2,13 @@ use crate::FileType;
 use crate::Position;
 use crate::Row;
 use crate::SearchDirection;
+
 use std::fs;
 use std::io::Write;
+
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 
 #[derive(Default)]
 pub struct Document {
@@ -11,6 +16,8 @@ pub struct Document {
     pub file_name: Option<String>,
     dirty: bool,
     file_type: FileType,
+    syntax_set: SyntaxSet,
+    theme_set: ThemeSet,
 }
 
 impl Document {
@@ -23,11 +30,16 @@ impl Document {
             rows.push(Row::from(value));
         }
 
+        let ss = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+
         Ok(Self {
             rows,
             file_name: Some(filename.to_string()),
             dirty: false,
             file_type,
+            syntax_set: ss,
+            theme_set: ts,
         })
     }
 
@@ -57,10 +69,12 @@ impl Document {
         if c == '\n' {
             self.insert_newline(at);
         } else if at.y == self.rows.len() {
+            // Handle insertion at the end of the document
             let mut row = Row::default();
             row.insert(0, c);
             self.rows.push(row);
         } else {
+            // Handle regular character insertion
             let row = &mut self.rows[at.y];
             row.insert(at.x, c);
         }
@@ -161,25 +175,13 @@ impl Document {
         None
     }
 
-    pub fn highlight(&mut self, word: &Option<String>, until: Option<usize>) {
-        let mut start_with_comment = false;
-
-        let until = if let Some(until) = until {
-            if until.saturating_add(1) < self.rows.len() {
-                until.saturating_add(1)
-            } else {
-                self.rows.len()
+    pub fn highlight(&mut self) {
+        if let Some(syntax) = self.syntax_set.find_syntax_by_extension("rs") {
+            let mut h = HighlightLines::new(syntax, &self.theme_set.themes["base16-ocean.dark"]);
+            for row in &mut self.rows {
+                row.highlight(&syntax, &self.theme_set, &self.syntax_set, &mut h);
             }
         } else {
-            self.rows.len()
-        };
-
-        for row in &mut self.rows {
-            start_with_comment = row.highlight(
-                &self.file_type.highlighting_options(),
-                word,
-                start_with_comment,
-            );
         }
     }
 

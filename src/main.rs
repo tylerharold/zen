@@ -15,6 +15,7 @@ mod highlighting;
 mod mode;
 mod row;
 mod terminal;
+mod util;
 
 use editor::Editor;
 
@@ -28,5 +29,7 @@ pub use row::Row;
 pub use terminal::Terminal;
 
 fn main() {
+    env_logger::init();
+
     Editor::default().run();
 }

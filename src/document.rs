@@ -12,18 +12,32 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
 
+/// Representation of a file, existing or new.
 #[derive(Default)]
 pub struct Document {
-    rows: Vec<Row>,
+    // {name.extension} - Optional in the case of a new file that hasn't been saved.
     pub file_name: Option<String>,
-    dirty: bool,
+
+    // {extension} - ex=rs,ts,go,md,toml
     file_type: String,
+
+    // Represents the file's contents, can be seen as a vec of lines.
+    rows: Vec<Row>,
+
+    // Has the document been modified since opening?
+    dirty: bool,
+
+    // A guideline on how to highlight the document's filetype.
     syntax_set: SyntaxSet,
+
+    // A set of themes, includes convenient methods for loading and discovering themes.
     theme_set: ThemeSet,
 }
 
 impl Document {
+    // Creates a new document (opens a file) based on the filename/path given.
     pub fn open(filename: &str) -> Result<Self, std::io::Error> {
+        // Grab the contents of the file
         let contents = fs::read_to_string(filename)?;
 
         let file_type = Path::new(filename)
@@ -31,7 +45,6 @@ impl Document {
             .and_then(OsStr::to_str)
             .unwrap_or(&"Unknown");
 
-        log::error!("{:?}", file_type.to_string());
         let mut rows = Vec::new();
 
         let ss = SyntaxSet::load_defaults_newlines();

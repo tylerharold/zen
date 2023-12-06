@@ -6,14 +6,23 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::as_24_bit_terminal_escaped;
 use unicode_segmentation::UnicodeSegmentation;
 
+/// Implementation of a document's row/line.
 #[derive(Default)]
 pub struct Row {
+    // The raw slice of a line's content.
     pub string: String,
+
+    // A highlighted version of the string. This gets updated when the row is in view,
+    // or on change, but will be initialized with the same value as self.string.
     highlighting: String,
+
+    // String length with graphemes in consideration
+    // Updated on change
     len: usize,
 }
 
 impl From<&str> for Row {
+    // Typically called when instantiating a row through a loop of content lines in a document.
     fn from(slice: &str) -> Self {
         let mut row = Self {
             string: String::from(slice),
@@ -26,22 +35,27 @@ impl From<&str> for Row {
 }
 
 impl Row {
+    // Returns a display-ready string for the terminal
     pub fn render(&self) -> String {
         self.highlighting.clone()
     }
 
+    // Gets the length of a string with graphemes in consideration
     pub fn len(&self) -> usize {
         self.len
     }
 
+    // Checks if the row's string is empty
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    // Keeps the string's length updated on change
     pub fn update_len(&mut self) {
         self.len = self.string[..].graphemes(true).count();
     }
 
+    // Handles row insertions
     pub fn insert(&mut self, at: usize, c: char) {
         if at >= self.len() {
             self.string.push(c);
@@ -56,6 +70,8 @@ impl Row {
         self.update_len();
     }
 
+    // Handles row insertions, alternative for a string.
+    // Probably not necessary.
     pub fn insert_str(&mut self, at: usize, str: &str) {
         if at >= self.len() {
             self.string.push_str(str);
@@ -70,6 +86,7 @@ impl Row {
         self.update_len();
     }
 
+    // Handles deletions to the row's string.
     pub fn delete(&mut self, at: usize) {
         if at >= self.len() {
             return;

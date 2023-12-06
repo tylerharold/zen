@@ -19,36 +19,62 @@ const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const QUIT_TIMES: u8 = 3;
 
+/// 2D Position
 #[derive(Default, Clone)]
 pub struct Position {
     pub x: usize,
     pub y: usize,
 }
 
+/// Used by the status bar to display text
 struct StatusMessage {
+    // Text displayed in the status bar
     text: String,
+
+    // How long before the message should be displayed.
     time: Instant,
 }
 
+/// Used by the search functionality to dictate which direction we're looking for text
 #[derive(PartialEq, Copy, Clone)]
 pub enum SearchDirection {
     Forward,
     Backward,
 }
 
+/// Entry point for our application/editor.
 pub struct Editor {
-    should_quit: bool,
+    // Manages terminal impl
     pub terminal: Terminal,
-    pub cursor_position: Position,
-    pub offset: Position,
+
+    // Manages active document
     pub document: Document,
-    status_message: StatusMessage,
-    quit_times: u8,
-    highlighted_word: Option<String>,
+
+    // Current cursor Position (x, y)
+    pub cursor_position: Position,
+
+    // Horizontal & vertical offset (x, y)
+    pub offset: Position,
+
+    // Current Editor mode the user is in
     mode: EditorMode,
+
+    // Highlighted word, for search, etc.
+    highlighted_word: Option<String>,
+
+    // Active status message for the status bar.
+    status_message: StatusMessage,
+
+    // How many times the user should hit the quit hotkey before exiting a dirty document.
+    quit_times: u8,
+
+    // Breaks the run loop when set to true.
+    should_quit: bool,
 }
 
 impl Editor {
+    // Main application loop. Used in main.rs to instantiate the editor.
+    // Should quit check is called after the frame has finished initializing.
     pub fn run(&mut self) {
         loop {
             if let Err(error) = self.refresh_screen() {
@@ -65,6 +91,8 @@ impl Editor {
         }
     }
 
+    // Editor defaults.
+    // Handles arguments and initial editor states.
     pub fn default() -> Self {
         let args: Vec<String> = env::args().collect();
         let mut initial_status =
@@ -96,6 +124,9 @@ impl Editor {
         }
     }
 
+    // Processes keypresses in the active terminal.
+    // Used by the main editor loop and checked after a frame has finished rendering.
+    // TODO: These keymaps will be loaded through a configuration file.
     fn process_keypress(&mut self) -> Result<(), std::io::Error> {
         let pressed_key = Terminal::read_key()?;
 
@@ -169,6 +200,10 @@ impl Editor {
         Ok(())
     }
 
+    // Executes a command given
+    // Matches commands::Command to a public function found in the commands folder.
+    // TODO: The goal of having the commands folder is for the potential use of a plugin
+    // system that could utilize these functions to interact with with the editor.
     fn execute(&mut self, command: Command) {
         match command {
             Command::CursorMoveUp => commands::cursor::move_up(self),
@@ -196,6 +231,7 @@ impl Editor {
         }
     }
 
+    // Handles terminal scrolling by adjusting the offset.
     fn scroll(&mut self) {
         let Position { x, y } = self.cursor_position;
         let width = self.terminal.size().width as usize;
@@ -214,6 +250,8 @@ impl Editor {
         }
     }
 
+    // Handles frame/screen refreshes.
+    // Includes highlighting & redrawing the rows & TUI
     fn refresh_screen(&mut self) -> Result<(), std::io::Error> {
         Terminal::cursor_hide();
         Terminal::cursor_position(&Position::default());
@@ -222,6 +260,9 @@ impl Editor {
             Terminal::clear_screen();
         } else {
             let viewport = self.calculate_viewport();
+
+            // It's important that we highlight before drawing
+            // We will only be highlighting the rows visible in the viewport to improve performance
             self.document.highlight(viewport);
             self.draw_rows();
             self.draw_status_bar();
@@ -235,6 +276,7 @@ impl Editor {
         Terminal::flush()
     }
 
+    // Returns a range of the row indexes within the terminal's view.
     fn calculate_viewport(&self) -> Range<usize> {
         let height = self.terminal.size().height as usize;
         let start_row = self.offset.y;
@@ -243,6 +285,15 @@ impl Editor {
         start_row..end_row
     }
 
+    // Handles re-rendering all rows within the terminal's view.
+    // Will account for cases such as an empty document, or an empty row.
+    // (?) Might move that...
+    //
+    // In the case of a populated row, we will call self.draw_row(row),
+    // which will then call row.render(), and self.draw_row will print
+    // the string that returns from row.render().
+    //
+    // This is probably overcomplicated and will be rewritten.
     fn draw_rows(&self) {
         let height = self.terminal.size().height;
         for terminal_row in 0..height {
@@ -261,6 +312,9 @@ impl Editor {
         }
     }
 
+    // Draws a welcome message in the case of an empty document.
+    // The case check can currently be found here, in self.draw_rows()
+    // (As of pre-0.1)
     fn draw_welcome_message(&self) {
         let mut welcome_message = format!("Zen {}\r", VERSION);
         let width = self.terminal.size().width as usize;
@@ -273,11 +327,17 @@ impl Editor {
         println!("{}\r", welcome_message);
     }
 
+    // Handles printing a row to the terminal with the String provided
+    // by row.render()
     fn draw_row(&self, row: &Row) {
         let row = row.render();
         println!("{}\r", row)
     }
 
+    // Draws a status bar to the terminal.
+    // This is primarily used for information on the document, such
+    // as the file opened, dirty status, document's language, etc.
+    // TODO: Stylize this with the active theme.
     fn draw_status_bar(&self) {
         let mut status;
         let width = self.terminal.size().width as usize;
@@ -318,6 +378,7 @@ impl Editor {
         Terminal::reset_bg_color();
     }
 
+    // Message bar used to display text and command assistance.
     fn draw_message_bar(&self) {
         Terminal::clear_current_line();
         let message = &self.status_message;
@@ -329,6 +390,8 @@ impl Editor {
         }
     }
 
+    // Used by search and command operations by providing an input state.
+    // This uses the message bar.
     fn prompt<C>(&mut self, prompt: &str, mut callback: C) -> Result<Option<String>, std::io::Error>
     where
         C: FnMut(&mut Self, Key, &String),
@@ -365,6 +428,7 @@ impl Editor {
         Ok(Some(result))
     }
 
+    // Saves the active document.
     fn save(&mut self) {
         if self.document.file_name.is_none() {
             let new_name = self.prompt("Save as: ", |_, _, _| {}).unwrap_or(None);
@@ -384,6 +448,7 @@ impl Editor {
         }
     }
 
+    // Active document search functionality.
     fn search(&mut self) {
         let old_position = self.cursor_position.clone();
 

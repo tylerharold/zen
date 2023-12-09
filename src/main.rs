@@ -24,8 +24,11 @@ pub use mode::EditorMode;
 pub use row::Row;
 pub use terminal::Terminal;
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    Editor::default().run();
+    Editor::default().await.run();
+
+    Ok(())
 }

@@ -11,4 +11,5 @@ env_logger = "0.10.1"
 log = "0.4.20"
 syntect = "5.1.0"
 termion = "2.0.3"
+tokio = {version = "1.35.0", features = ["full"]}
 unicode-segmentation = "1.10.1"

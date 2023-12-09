@@ -12,6 +12,9 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
 
+use tokio::fs::File;
+use tokio::io::AsyncReadExt;
+
 /// Representation of a file, existing or new.
 #[derive(Default)]
 pub struct Document {
@@ -36,9 +39,11 @@ pub struct Document {
 
 impl Document {
     // Creates a new document (opens a file) based on the filename/path given.
-    pub fn open(filename: &str) -> Result<Self, std::io::Error> {
-        // Grab the contents of the file
-        let contents = fs::read_to_string(filename)?;
+    pub async fn open(filename: &str) -> Result<Self, std::io::Error> {
+        // Open & grab the contents of the file
+        let mut file = File::open(filename).await?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).await?;
 
         let file_type = Path::new(filename)
             .extension()

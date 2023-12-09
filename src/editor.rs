@@ -93,20 +93,21 @@ impl Editor {
 
     // Editor defaults.
     // Handles arguments and initial editor states.
-    pub fn default() -> Self {
+    pub async fn default() -> Self {
         let args: Vec<String> = env::args().collect();
         let mut initial_status =
             String::from("HELP: Ctrl-F = find | Ctrl-S = save | Ctrl-Q = quit");
         let document = if args.len() > 1 {
             let file_name = &args[1];
-            let doc = Document::open(&file_name);
+            let doc = match Document::open(&file_name).await {
+                Ok(doc) => doc,
+                Err(_) => {
+                    initial_status = format!("ERR: Could not open file: {}", file_name);
+                    Document::default()
+                }
+            };
 
-            if doc.is_ok() {
-                doc.unwrap()
-            } else {
-                initial_status = format!("ERR: Could not open file: {}", file_name);
-                Document::default()
-            }
+            doc
         } else {
             Document::default()
         };

@@ -1,5 +1,6 @@
 use crate::commands;
 use crate::commands::Command;
+use crate::commands::CommandQueue;
 use crate::Document;
 use crate::EditorMode;
 use crate::Row;
@@ -12,6 +13,7 @@ use std::time::Duration;
 use std::time::Instant;
 use termion::color;
 use termion::event::Key;
+use tokio::sync::mpsc;
 
 const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
 const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
@@ -57,7 +59,10 @@ pub struct Editor {
     pub offset: Position,
 
     // Current Editor mode the user is in
-    mode: EditorMode,
+    pub mode: EditorMode,
+
+    // Command queue
+    command_queue: CommandQueue,
 
     // Highlighted word, for search, etc.
     highlighted_word: Option<String>,
@@ -75,18 +80,34 @@ pub struct Editor {
 impl Editor {
     // Main application loop. Used in main.rs to instantiate the editor.
     // Should quit check is called after the frame has finished initializing.
-    pub fn run(&mut self) {
+    pub async fn run(&mut self) {
+        let command_processor_handle = tokio::spawn(async { Ok::<(), tokio::task::JoinError>(()) });
+
         loop {
             if let Err(error) = self.refresh_screen() {
-                die(error);
+                print!("{}", termion::clear::All);
+                panic!("{error:?}");
             }
 
             if self.should_quit {
                 break;
             }
 
-            if let Err(error) = self.process_keypress() {
+            if let Err(error) = self.process_keypress().await {
                 die(error);
+            }
+        }
+
+        match command_processor_handle.await {
+            Ok(inner_result) => {
+                if let Err(e) = inner_result {
+                    print!("{}", termion::clear::All);
+                    panic!("{e:?}");
+                }
+            }
+            Err(e) => {
+                print!("{}", termion::clear::All);
+                panic!("{e:?}");
             }
         }
     }
@@ -112,6 +133,12 @@ impl Editor {
             Document::default()
         };
 
+        let (command_sender, command_receiver) = mpsc::channel(100);
+        let command_queue: CommandQueue = CommandQueue {
+            sender: command_sender,
+            receiver: command_receiver,
+        };
+
         Self {
             should_quit: false,
             terminal: Terminal::default().expect("Failed to initialize terminal"),
@@ -122,114 +149,75 @@ impl Editor {
             quit_times: QUIT_TIMES,
             highlighted_word: None,
             mode: EditorMode::Normal,
+            command_queue,
         }
     }
 
     // Processes keypresses in the active terminal.
     // Used by the main editor loop and checked after a frame has finished rendering.
     // TODO: These keymaps will be loaded through a configuration file.
-    fn process_keypress(&mut self) -> Result<(), std::io::Error> {
+    async fn process_keypress(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let pressed_key = Terminal::read_key()?;
 
-        match self.mode {
+        let command: Option<Box<dyn Command>> = match self.mode {
             EditorMode::Normal => match pressed_key {
-                // Switch to Insert Mode
-                Key::Char('i') => self.execute(Command::EditorSwitchMode(EditorMode::Insert)),
+                Key::Char('i') => Some(Box::new(commands::mode::SetModeCommand {
+                    mode: EditorMode::Insert,
+                })),
 
-                Key::Char('h') => self.execute(Command::CursorMoveLeft),
-                Key::Char('j') => self.execute(Command::CursorMoveUp),
-                Key::Char('k') => self.execute(Command::CursorMoveDown),
-                Key::Char('l') => self.execute(Command::CursorMoveRight),
+                Key::Char('h') => Some(Box::new(commands::cursor::CursorMoveLeftCommand)),
+                Key::Char('j') => Some(Box::new(commands::cursor::CursorMoveUpCommand)),
+                Key::Char('k') => Some(Box::new(commands::cursor::CursorMoveDownCommand)),
+                Key::Char('l') => Some(Box::new(commands::cursor::CursorMoveRightCommand)),
 
-                Key::Left => self.execute(Command::CursorMovePrevWord),
-                Key::Right => self.execute(Command::CursorMoveNextWord),
+                Key::Left => Some(Box::new(commands::cursor::CursorMoveLeftCommand)),
+                Key::Up => Some(Box::new(commands::cursor::CursorMoveUpCommand)),
+                Key::Down => Some(Box::new(commands::cursor::CursorMoveDownCommand)),
+                Key::Right => Some(Box::new(commands::cursor::CursorMoveRightCommand)),
 
-                Key::Ctrl('J') => self.execute(Command::DocumentMoveStart),
-                Key::Ctrl('K') => self.execute(Command::DocumentMoveEnd),
-                Key::Char('J') => self.execute(Command::DocumentPageUp),
-                Key::Char('K') => self.execute(Command::DocumentPageDown),
-                Key::Char('H') => self.execute(Command::CursorMoveStart),
-                Key::Char('L') => self.execute(Command::CursorMoveEnd),
-
-                Key::Ctrl('q') => {
-                    if self.quit_times > 0 && self.document.is_dirty() {
-                        self.status_message = StatusMessage::from(format!(
-                        "WARNING! File has unsaved changes. Press Ctrl-Q {} more times to quit.",
-                        self.quit_times
-                    ));
-                        self.quit_times -= 1;
-                        return Ok(());
-                    }
-                    self.should_quit = true
-                }
-                _ => (),
+                _ => None,
             },
             EditorMode::Insert => match pressed_key {
-                // Switch to Normal mode
-                Key::Esc => self.execute(Command::EditorSwitchMode(EditorMode::Normal)),
+                Key::Char('i') => Some(Box::new(commands::mode::SetModeCommand {
+                    mode: EditorMode::Normal,
+                })),
 
-                Key::Ctrl('s') => self.execute(Command::DocumentSave),
-                Key::Ctrl('f') => self.execute(Command::DocumentSearch),
-                Key::Char(c) => self.execute(Command::DocumentInsert(c)),
-                Key::Delete => self.document.delete(&self.cursor_position),
-                Key::Backspace => {
-                    if self.cursor_position.x > 0 || self.cursor_position.y > 0 {
-                        self.execute(Command::CursorMoveLeft);
-                        self.document.delete(&self.cursor_position);
-                    }
-                }
-                Key::Up => self.execute(Command::CursorMoveUp),
-                Key::Down => self.execute(Command::CursorMoveDown),
-                Key::Left => self.execute(Command::CursorMoveLeft),
-                Key::Right => self.execute(Command::CursorMoveRight),
-                Key::PageUp => self.execute(Command::DocumentPageUp),
-                Key::PageDown => self.execute(Command::DocumentPageDown),
-                Key::Home => self.execute(Command::CursorMoveStart),
-                Key::End => self.execute(Command::CursorMoveEnd),
-                _ => (),
+                Key::Left => Some(Box::new(commands::cursor::CursorMoveLeftCommand)),
+                Key::Up => Some(Box::new(commands::cursor::CursorMoveUpCommand)),
+                Key::Down => Some(Box::new(commands::cursor::CursorMoveDownCommand)),
+                Key::Right => Some(Box::new(commands::cursor::CursorMoveRightCommand)),
+
+                _ => None,
             },
             EditorMode::Command => match pressed_key {
-                _ => (),
+                _ => None,
             },
+        };
+
+        if let Some(cmd) = command {
+            self.push_command(cmd)?;
         }
 
         self.scroll();
+
         if self.quit_times < QUIT_TIMES {
             self.quit_times = QUIT_TIMES;
             self.status_message = StatusMessage::from(String::new());
         }
+
         Ok(())
     }
 
-    // Executes a command given
-    // Matches commands::Command to a public function found in the commands folder.
-    // TODO: The goal of having the commands folder is for the potential use of a plugin
-    // system that could utilize these functions to interact with with the editor.
-    fn execute(&mut self, command: Command) {
-        match command {
-            Command::CursorMoveUp => commands::cursor::move_up(self),
-            Command::CursorMoveDown => commands::cursor::move_down(self),
-            Command::CursorMoveLeft => commands::cursor::move_left(self),
-            Command::CursorMoveRight => commands::cursor::move_right(self),
-            Command::CursorMoveStart => commands::cursor::move_start_of_row(self),
-            Command::CursorMoveEnd => commands::cursor::move_end_of_row(self),
-            Command::CursorMoveNextWord => commands::cursor::move_next_word(self),
-            Command::CursorMovePrevWord => commands::cursor::move_prev_word(self),
-
-            Command::DocumentInsert(c) => {
-                self.document.insert(&self.cursor_position, c);
-                self.execute(Command::CursorMoveRight);
-            }
-            Command::DocumentSave => self.save(),
-            Command::DocumentSearch => self.search(),
-            Command::DocumentPageUp => commands::view::scroll_up(self),
-            Command::DocumentPageDown => commands::view::scroll_down(self),
-            Command::DocumentMoveStart => commands::cursor::move_start_of_document(self),
-            Command::DocumentMoveEnd => commands::cursor::move_end_of_document(self),
-
-            Command::EditorSwitchMode(mode) => self.mode = mode,
-            _ => (),
+    pub async fn run_command_loop(&mut self) {
+        while let Some(command) = self.command_queue.receiver.recv().await {
+            command.execute(self).expect("Failed to execute command");
         }
+    }
+
+    fn push_command(&self, command: Box<dyn Command>) -> Result<(), Box<dyn std::error::Error>> {
+        self.command_queue.sender.try_send(command)?;
+
+        Ok(())
     }
 
     // Handles terminal scrolling by adjusting the offset.
@@ -430,7 +418,7 @@ impl Editor {
     }
 
     // Saves the active document.
-    fn save(&mut self) {
+    async fn save(&mut self) {
         if self.document.file_name.is_none() {
             let new_name = self.prompt("Save as: ", |_, _, _| {}).unwrap_or(None);
 
@@ -442,7 +430,7 @@ impl Editor {
             self.document.file_name = new_name;
         }
 
-        if self.document.save().is_ok() {
+        if self.document.save().await.is_ok() {
             self.status_message = StatusMessage::from("File saved successfully.".to_string());
         } else {
             self.status_message = StatusMessage::from("Error writing file".to_string());
@@ -462,7 +450,7 @@ impl Editor {
                     match key {
                         Key::Right | Key::Down => {
                             direction = SearchDirection::Forward;
-                            editor.execute(Command::CursorMoveRight);
+                            //editor.execute(Command::CursorMoveRight);
                             moved = true;
                         }
                         Key::Left | Key::Up => direction = SearchDirection::Backward,
@@ -476,7 +464,7 @@ impl Editor {
                         editor.cursor_position = position;
                         editor.scroll();
                     } else if moved {
-                        editor.execute(Command::CursorMoveLeft);
+                        //editor.execute(Command::CursorMoveLeft);
                     }
                     editor.highlighted_word = Some(query.to_string());
                 },
@@ -491,7 +479,7 @@ impl Editor {
     }
 }
 
-fn die(e: std::io::Error) {
+fn die(e: Box<dyn std::error::Error>) {
     print!("{}", termion::clear::All);
     panic!("{e:?}");
 }

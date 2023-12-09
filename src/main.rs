@@ -28,7 +28,9 @@ pub use terminal::Terminal;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
 
-    Editor::default().await.run();
+    let mut editor = Editor::default().await;
+
+    editor.run().await;
 
     Ok(())
 }

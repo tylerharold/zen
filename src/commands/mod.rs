@@ -1,4 +1,4 @@
-use crate::EditorMode;
+use crate::mode::EditorMode;
 
 pub mod cursor;
 pub mod view;

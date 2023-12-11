@@ -1,6 +1,5 @@
-use crate::Position;
-use crate::Row;
-use crate::SearchDirection;
+use crate::editor::{Position, SearchDirection};
+use crate::row::Row;
 
 use std::ffi::OsStr;
 use std::fs;

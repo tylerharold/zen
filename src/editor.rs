@@ -1,9 +1,9 @@
 use crate::commands;
 use crate::commands::Command;
-use crate::Document;
-use crate::EditorMode;
-use crate::Row;
-use crate::Terminal;
+use crate::document::Document;
+use crate::mode::EditorMode;
+use crate::row::Row;
+use crate::terminal::Terminal;
 
 use std::cmp;
 use std::env;
@@ -13,10 +13,6 @@ use std::time::Instant;
 use termion::color;
 use termion::event::Key;
 
-const STATUS_FG_COLOR: color::Rgb = color::Rgb(63, 63, 63);
-const STATUS_BG_COLOR: color::Rgb = color::Rgb(239, 239, 239);
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const QUIT_TIMES: u8 = 3;
 
 /// 2D Position
@@ -316,7 +312,7 @@ impl Editor {
     // The case check can currently be found here, in self.draw_rows()
     // (As of pre-0.1)
     fn draw_welcome_message(&self) {
-        let mut welcome_message = format!("Zen {}\r", VERSION);
+        let mut welcome_message = format!("Zen {}\r", env!("CARGO_PKG_VERSION"));
         let width = self.terminal.size().width as usize;
         let len = welcome_message.len();
         let padding = width.saturating_sub(len) / 2;
@@ -371,8 +367,8 @@ impl Editor {
         status = format!("{}{}", status, line_indicator);
         status.truncate(width);
 
-        Terminal::set_bg_color(STATUS_BG_COLOR);
-        Terminal::set_fg_color(STATUS_FG_COLOR);
+        Terminal::set_bg_color(color::Rgb(239, 239, 239));
+        Terminal::set_fg_color(color::Rgb(63, 63, 63));
         println!("{}\r", status);
         Terminal::reset_fg_color();
         Terminal::reset_bg_color();

@@ -1,4 +1,4 @@
-use crate::{editor::Editor, Position};
+use crate::editor::{Editor, Position};
 
 pub fn scroll_up(editor: &mut Editor) {
     let Position { mut y, mut x } = editor.cursor_position;

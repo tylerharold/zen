@@ -1,4 +1,4 @@
-use crate::SearchDirection;
+use crate::editor::SearchDirection;
 
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style;

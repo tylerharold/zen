@@ -1,4 +1,4 @@
-use crate::Position;
+use crate::editor::Position;
 use std::io::{self, stdout, Write};
 use termion::color;
 use termion::event::Key;

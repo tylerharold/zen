@@ -1,5 +1,4 @@
-use crate::editor::Editor;
-use crate::Position;
+use crate::editor::{Editor, Position};
 
 use std::cmp;
 

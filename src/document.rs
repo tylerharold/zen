@@ -3,14 +3,15 @@ use crate::Row;
 use crate::SearchDirection;
 
 use std::ffi::OsStr;
-use std::fs;
-use std::io::Write;
 use std::ops::Range;
 use std::path::Path;
 
 use syntect::easy::HighlightLines;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
+
+use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Representation of a file, existing or new.
 #[derive(Default)]
@@ -36,9 +37,11 @@ pub struct Document {
 
 impl Document {
     // Creates a new document (opens a file) based on the filename/path given.
-    pub fn open(filename: &str) -> Result<Self, std::io::Error> {
-        // Grab the contents of the file
-        let contents = fs::read_to_string(filename)?;
+    pub async fn open(filename: &str) -> Result<Self, std::io::Error> {
+        // Open & grab the contents of the file
+        let mut file = File::open(filename).await?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).await?;
 
         let file_type = Path::new(filename)
             .extension()
@@ -135,14 +138,13 @@ impl Document {
         }
     }
 
-    pub fn save(&mut self) -> Result<(), std::io::Error> {
+    pub async fn save(&mut self) -> Result<(), std::io::Error> {
         if let Some(file_name) = &self.file_name {
-            let mut file = fs::File::create(file_name)?;
-            self.file_type = ".rs".to_string();
+            let mut file = tokio::fs::File::create(file_name).await?;
 
             for row in &mut self.rows {
-                file.write_all(row.as_bytes())?;
-                file.write_all(b"\n")?;
+                file.write_all(row.as_bytes()).await?;
+                file.write_all(b"\n").await?;
             }
             self.dirty = false;
         }

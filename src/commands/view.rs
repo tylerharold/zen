@@ -1,3 +1,5 @@
+use std::cmp;
+
 use crate::{editor::Editor, Position};
 
 pub fn scroll_up(editor: &mut Editor) {
@@ -25,4 +27,15 @@ pub fn scroll_down(editor: &mut Editor) {
     };
 
     editor.cursor_position = Position { x, y }
+}
+
+pub fn move_start_of_document(editor: &mut Editor) {
+    editor.cursor_position = Position::default();
+    editor.offset = Position::default();
+}
+
+pub fn move_end_of_document(editor: &mut Editor) {
+    let y = editor.document.len().saturating_sub(1);
+    editor.cursor_position = Position { x: 0, y };
+    editor.offset.y = cmp::max(0, y.saturating_sub(editor.terminal.size().height as usize));
 }
